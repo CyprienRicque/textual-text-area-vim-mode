@@ -1,12 +1,7 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "textual-vim"
 version = "0.1.0"
 description = "A Textual widget for a text area based on VIM"
-license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.9"
 keywords = [

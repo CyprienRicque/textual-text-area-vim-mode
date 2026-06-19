@@ -1,7 +1,7 @@
 import logging
 from textual import events
 from textual.widgets import TextArea
-from typing import Literal, override
+from typing import Awaitable, Literal, override, Callable
 from textual.document._document import Selection
 
 logger = logging.getLogger(__name__)
@@ -34,12 +34,19 @@ class VimTextArea(TextArea):
         color: lightblue;
         text-style: underline bold;
     }
+
+    VimTextArea.replace-mode .text-area--cursor {
+        background: yellow;
+        color: $background;
+        text-style: bold;
+    }
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.cursor_blink = False
         self._vi_mode: VimMode = "normal"
+        self._next_key_callback: Callable[..., Awaitable[bool]] | None = None
 
     @override
     def on_mount(self) -> None:
@@ -49,20 +56,30 @@ class VimTextArea(TextArea):
         self.remove_class("normal-mode")
         self.remove_class("insert-mode")
         self.remove_class("visual-mode")
+        self.remove_class("replace-mode")
+
         if self._vi_mode == "normal":
             self.add_class("normal-mode")
         elif self._vi_mode == "insert":
             self.add_class("insert-mode")
         elif self._vi_mode == "visual":
             self.add_class("visual-mode")
+        elif self._vi_mode == "replace":
+            self.add_class("replace-mode")
 
     def action_cursor_absolute_line_start(self) -> None:
-        """Move cursor to column 0 of the current line."""
         row, _ = self.cursor_location
         self.move_cursor((row, 0))
 
     @override
     async def _on_key(self, event: events.Key) -> None:
+        if self._next_key_callback:
+            success = await self._next_key_callback(event)
+            if success:
+                event.prevent_default()
+                self._next_key_callback = None
+                return
+
         if self._vi_mode == "normal":
             return await self._handle_normal_mode(event)
         elif self._vi_mode == "insert":
@@ -85,13 +102,25 @@ class VimTextArea(TextArea):
             return
 
     async def _handle_visual_line_mode(self, event: events.Key) -> None:
-        return await self._handle_visual_mode(event)  # TODO
+        event.prevent_default()
+        if event.key == "escape":
+            self._update_mode("normal")
+            self.selection = Selection.cursor(self.cursor_location)
+            return
+
+        if (handler := VISUAL_LINE_MODE_MAPPING.get(event.key)):
+            return handler(self)
+        if (handler := MODE_MAPPING.get(event.key)):
+            return handler(self)
+
 
     async def _handle_visual_mode(self, event: events.Key) -> None:
         event.prevent_default()
         if event.key == "escape":
+            self.selection = Selection.cursor(self.cursor_location)
             self._update_mode("normal")
             return
+
         if (handler := MODE_MAPPING.get(event.key)):
             handler(self)
 
@@ -100,14 +129,23 @@ class VimTextArea(TextArea):
         self._update_mode("visual")
 
     def enter_line_visual_mode(self) -> None:
+        logger.info("enter_line_visual_mode")
         current_row, current_col = self.cursor_location
         line = self.get_line(current_row)
         self.selection = Selection((current_row, 0), (current_row, len(line)))
-        self.move_cursor((current_row, current_col))
         self._update_mode("visual_line")
 
     def enter_replace_mode(self) -> None:
-        pass  # TODO
+        self._update_mode("replace")
+
+    async def replace_char_with_key(self, event: events.Key) -> bool:
+        self.action_delete_right()
+        await super()._on_key(event)
+        self.action_cursor_left()
+        return True
+
+    def replace_char_by_next_key(self) -> None:
+        self._next_key_callback = self.replace_char_with_key
 
     def enter_insert_mode(self) -> None:
         self._vi_mode = "insert"
@@ -160,6 +198,19 @@ class VimTextArea(TextArea):
         select = self._vi_mode == "visual"
         super().action_cursor_word_left(select=select)
 
+    def action_visual_line_cursor_down(self) -> None:
+        current_row, _ = self.cursor_location
+        if current_row + 1 >= self.document.line_count:
+            return
+        line = self.get_line(current_row + 1)
+        self.selection = Selection(self.selection.start, (current_row + 1, len(line)))
+
+    def action_visual_line_cursor_up(self) -> None:
+        current_row, _ = self.cursor_location
+        if current_row == 0:
+            return
+        self.selection = Selection((current_row - 1, 0), self.selection.end)
+
     @override
     def _on_blur(self, event: events.Blur) -> None:
         if self._vi_mode != "normal":
@@ -191,5 +242,12 @@ MODE_MAPPING = {
     "i": VimTextArea.enter_insert_mode,
     "v": VimTextArea.enter_visual_mode,
     "V": VimTextArea.enter_line_visual_mode,
-    "r": VimTextArea.enter_replace_mode,
+    "R": VimTextArea.enter_replace_mode,
+    "r": VimTextArea.replace_char_by_next_key,
 }
+
+VISUAL_LINE_MODE_MAPPING = {
+    "j": VimTextArea.action_visual_line_cursor_down,
+    "k": VimTextArea.action_visual_line_cursor_up,
+}
+
