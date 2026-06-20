@@ -1,4 +1,4 @@
-# textual-text-area-vim-mode
+# Textual Text Area - Vim mode
 
 Vim mode for textual Area.
 
