@@ -158,7 +158,7 @@ class VimTextArea(TextArea):
 
     def action_cursor_absolute_line_start(self) -> None:
         row, _ = self.cursor_location
-        self.move_cursor((row, 0))
+        self.context_aware_move_cursor((row, 0))
 
     @override
     async def _on_key(self, event: events.Key) -> None:
@@ -358,7 +358,7 @@ class VimTextArea(TextArea):
 
     def execute_pending_action_motion(self, destination: RangeLocation):
         if not self.pending_action:
-            self.move_cursor(destination.end)
+            self.context_aware_move_cursor(destination.end)
             return
 
         self.selection = Selection(destination.start, (destination.end[0], destination.end[1] + 1))
@@ -469,6 +469,11 @@ class VimTextArea(TextArea):
                 return
             line = self.get_line(self.selection.end[0] - 1)
             self.selection = Selection(self.selection.start, (self.selection.end[0] - 1, len(line)))
+
+    def context_aware_move_cursor(self, location: Location) -> None:  # FIXME: visual line mode
+        select = self.vi_mode in {"visual", "visual_line"}
+        logger.info(f"moving to {location=} with {select=}")
+        super().move_cursor(location, select=select)
 
     def o_key_pressed(self) -> None:
         if self._first_vertical_move_on_visual_mode == "up":
