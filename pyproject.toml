@@ -8,6 +8,7 @@ keywords = [
     "textual",
 ]
 dependencies = [
+    "pydantic>=2.13.4",
     "textual==8.2.7",
 ]
 
