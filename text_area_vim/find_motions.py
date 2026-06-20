@@ -1,6 +1,6 @@
 """Vim find motions: f, F, t, T."""
 
-from typing import Tuple
+from text_area_vim.types import Location, RangeLocation
 
 
 def _search_char(
@@ -10,11 +10,12 @@ def _search_char(
     lines: list[str],
     forward: bool,
     repeat: int = 1,
-) -> Tuple[int, int] | None:
+) -> RangeLocation | None:
     if not char or repeat < 1:
         return None
     
     found = 0
+    start_loc: Location = (current_row, current_col)
     
     if forward:
         # Search forward from current position
@@ -30,7 +31,7 @@ def _search_char(
                     break
                 found += 1
                 if found == repeat:
-                    return (row, idx)
+                    return RangeLocation(start=start_loc, end=(row, idx))
                 start_col = idx + 1
             
             row += 1
@@ -52,7 +53,7 @@ def _search_char(
                     break
                 found += 1
                 if found == repeat:
-                    return (row, idx)
+                    return RangeLocation(start=start_loc, end=(row, idx))
                 end_col = idx
             
             row -= 1
@@ -67,18 +68,7 @@ def find_forward(
     char: str,
     lines: list[str],
     repeat: int = 1,
-) -> Tuple[int, int] | None:
-    """
-    Find next occurrence of char moving forward (for 'f' motion).
-    Stops ON the character.
-    
-    Args:
-        current_row: Starting row position
-        current_col: Starting column position
-        char: Character to search for
-        lines: All lines of text
-        repeat: Which occurrence to find (1=first, 2=second, etc.)
-    """
+) -> RangeLocation | None:
     return _search_char(current_row, current_col, char, lines, forward=True, repeat=repeat)
 
 
@@ -88,7 +78,7 @@ def find_backward(
     char: str,
     lines: list[str],
     repeat: int = 1,
-) -> Tuple[int, int] | None:
+) -> RangeLocation | None:
     """
     Find previous occurrence of char moving backward (for 'F' motion).
     Stops ON the character.
@@ -109,7 +99,7 @@ def to_forward(
     char: str,
     lines: list[str],
     repeat: int = 1,
-) -> Tuple[int, int] | None:
+) -> RangeLocation | None:
     """
     Move to just before next occurrence of char (for 't' motion).
     Relies on find_forward implementation.
@@ -124,13 +114,15 @@ def to_forward(
     result = find_forward(current_row, current_col, char, lines, repeat=repeat)
     if result is None:
         return None
-    row, col = result
+    end_row, end_col = result.end
     # Move to position before the found character
-    if col > 0:
-        return (row, col - 1)
-    elif row > 0:
-        return (row - 1, len(lines[row - 1]) - 1)
-    return None
+    if end_col > 0:
+        new_end: Location = (end_row, end_col - 1)
+    elif end_row > 0:
+        new_end = (end_row - 1, len(lines[end_row - 1]) - 1)
+    else:
+        return None
+    return RangeLocation(start=result.start, end=new_end)
 
 
 def to_backward(
@@ -139,7 +131,7 @@ def to_backward(
     char: str,
     lines: list[str],
     repeat: int = 1,
-) -> Tuple[int, int] | None:
+) -> RangeLocation | None:
     """
     Move to just before previous occurrence of char (for 'T' motion).
     Relies on find_backward implementation.
@@ -147,10 +139,12 @@ def to_backward(
     result = find_backward(current_row, current_col, char, lines, repeat=repeat)
     if result is None:
         return None
-    row, col = result
+    end_row, end_col = result.end
     # Move to position before the found character
-    if col > 0:
-        return (row, col - 1)
-    elif row > 0:
-        return (row - 1, len(lines[row - 1]) - 1)
-    return None
+    if end_col > 0:
+        new_end: Location = (end_row, end_col - 1)
+    elif end_row > 0:
+        new_end = (end_row - 1, len(lines[end_row - 1]) - 1)
+    else:
+        return None
+    return RangeLocation(start=result.start, end=new_end)

@@ -15,7 +15,20 @@ class ExampleVimApp(App[ComposeResult]):
 
     @override
     def compose(self) -> ComposeResult:
-        yield VimTextArea("Type here...\nPress 'i' to enter insert mode.\nPress 'Esc' to return to normal mode.")
+        yield VimTextArea((
+                "# Type here...\n"
+                "# Press 'i' to enter insert mode.\n"
+                "# Press \"Esc\" to return to normal mode.\n"
+                "\n"
+                "def main(oui: str):\n"
+                "    pass\n"
+                "\n"
+                "{\n"
+                "   \"oui\": \"non\"\n"
+                "   1: 2\n"
+                "}\n"
+
+        ))
 
     def on_mount(self) -> None:
         self.title = "Example Application"
