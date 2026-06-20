@@ -17,8 +17,14 @@ VimMode = Literal[
     "replace",
     "command",
     "terminal",
-    "operator_pending",
 ]
+
+_MODE_CLASSES = {
+  "normal": "normal-mode",
+  "insert": "insert-mode",
+  "visual": "visual-mode",
+  "replace": "replace-mode",
+}
 
 
 class VimTextArea(TextArea):
@@ -29,13 +35,13 @@ class VimTextArea(TextArea):
         text-style: bold;
     }
 
-    VimTextArea.insert-mode .text-area--cursor {
+    VimTextArea.replace-mode .text-area--cursor {
         background: black;
         color: lightblue;
         text-style: underline bold;
     }
 
-    VimTextArea.replace-mode .text-area--cursor {
+    VimTextArea.insert-mode .text-area--cursor {
         background: yellow;
         color: $background;
         text-style: bold;
@@ -53,19 +59,10 @@ class VimTextArea(TextArea):
         self._update_mode_styles()
 
     def _update_mode_styles(self) -> None:
-        self.remove_class("normal-mode")
-        self.remove_class("insert-mode")
-        self.remove_class("visual-mode")
-        self.remove_class("replace-mode")
-
-        if self._vi_mode == "normal":
-            self.add_class("normal-mode")
-        elif self._vi_mode == "insert":
-            self.add_class("insert-mode")
-        elif self._vi_mode == "visual":
-            self.add_class("visual-mode")
-        elif self._vi_mode == "replace":
-            self.add_class("replace-mode")
+        for cls in _MODE_CLASSES.values():
+            self.remove_class(cls)
+        if mode_class := _MODE_CLASSES.get(self._vi_mode):
+            self.add_class(mode_class)
 
     def action_cursor_absolute_line_start(self) -> None:
         row, _ = self.cursor_location
@@ -76,18 +73,30 @@ class VimTextArea(TextArea):
         if self._next_key_callback:
             success = await self._next_key_callback(event)
             if success:
-                event.prevent_default()
                 self._next_key_callback = None
+                self._update_mode("normal")
+                event.prevent_default()
                 return
 
         if self._vi_mode == "normal":
             return await self._handle_normal_mode(event)
+        elif self._vi_mode == "replace":
+            return await self._handle_replace_mode(event)
         elif self._vi_mode == "insert":
             return await self._handle_insert_mode(event)
         elif self._vi_mode == "visual":
             return await self._handle_visual_mode(event)
         elif self._vi_mode == "visual_line":
             return await self._handle_visual_line_mode(event)
+
+    async def _handle_replace_mode(self, event: events.Key) -> None:
+        if event.key == "escape":
+            self._update_mode("normal")
+            event.prevent_default()
+            return
+
+        self.action_delete_right()
+        await super()._on_key(event)
 
     async def _handle_normal_mode(self, event: events.Key) -> None:
         logger.info(f"Key pressed {event.key}")
@@ -129,8 +138,7 @@ class VimTextArea(TextArea):
         self._update_mode("visual")
 
     def enter_line_visual_mode(self) -> None:
-        logger.info("enter_line_visual_mode")
-        current_row, current_col = self.cursor_location
+        current_row, _ = self.cursor_location
         line = self.get_line(current_row)
         self.selection = Selection((current_row, 0), (current_row, len(line)))
         self._update_mode("visual_line")
@@ -218,6 +226,7 @@ class VimTextArea(TextArea):
 
     def _update_mode(self, mode: VimMode) -> None:
         self._vi_mode = mode
+        logger.info(f"{mode=}")
         self._update_mode_styles()
 
     @override
@@ -250,4 +259,5 @@ VISUAL_LINE_MODE_MAPPING = {
     "j": VimTextArea.action_visual_line_cursor_down,
     "k": VimTextArea.action_visual_line_cursor_up,
 }
+
 
