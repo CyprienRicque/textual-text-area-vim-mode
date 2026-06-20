@@ -4,7 +4,7 @@ from textual.app import App, ComposeResult
 from text_area_vim import VimTextArea
 
 
-class VimTextAreaApp(App[ComposeResult]):
+class ExampleVimApp(App[ComposeResult]):
     """Example application demonstrating VimTextArea."""
 
     CSS: ClassVar[str] = """
@@ -23,5 +23,5 @@ class VimTextAreaApp(App[ComposeResult]):
 
 
 if __name__ == "__main__":
-    app = VimTextAreaApp()
+    app = ExampleVimApp()
     app.run()

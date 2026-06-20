@@ -1,17 +1,21 @@
 import logging
-from textual import events
-from textual.widgets import TextArea
-from typing import Literal, override, Callable, Annotated
+from typing import Literal, override, Callable
 from collections.abc import Awaitable
-from textual.document._document import Selection
-from pydantic import BaseModel, Field
 from enum import StrEnum
 
+from pydantic import BaseModel
+from textual import events
+from textual.widgets import TextArea
+from textual.document._document import Selection
+
 from text_area_vim.find_motions import find_backward, find_forward
+from text_area_vim.matching_pairs import find_matching_pair
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.FileHandler("debug.log"))
+
 
 Location = tuple[int, int]
 
@@ -38,12 +42,14 @@ class RangeMotionChar(StrEnum):
     f = 'f'
     T = 'T'
     F = 'F'
+    inner = 'i'
+    around = 'a'
 
 
 class SimpleMotionChar(StrEnum):
-    end_of_line = "dollar_sign"
-    start_of_line = "0"
-    first_non_blank = "underscore"
+    dollar_sign = "dollar_sign"
+    zero = "0"
+    underscore = "underscore"
     percent_sign = "percent_sign"
 
 
@@ -251,8 +257,8 @@ class VimTextArea(TextArea):
             return True
 
         try:
-            destination = get_single_motion_destination(
-                motion_type=event.character,
+            destination = self.get_single_motion_destination(
+                motion_type=SimpleMotionChar(event.key),
                 current_row=self.cursor_location[0],
                 current_col=self.cursor_location[1],
                 lines=self.document.lines
@@ -261,6 +267,7 @@ class VimTextArea(TextArea):
             if not destination:
                 logger.info("no matching destination")
                 return True
+
             self.execute_pending_action(destination)
         finally:
             self.current_action = None
@@ -351,6 +358,9 @@ class VimTextArea(TextArea):
     def u_key_pressed(self):
         self.undo()
 
+    def ctrl_r_key_pressed(self):
+        self.redo()
+
     def action_visual_line_cursor_down(self) -> None:
         current_row, _ = self.cursor_location
         if current_row + 1 >= self.document.line_count:
@@ -378,6 +388,28 @@ class VimTextArea(TextArea):
     def _on_focus(self, event: events.Focus) -> None:
         self._update_mode_styles()
 
+    def get_single_motion_destination(
+        self,
+        motion_type: SimpleMotionChar,
+        current_row: int,
+        current_col: int,
+        lines: list[str],
+    ) -> tuple[int, int] | None:
+        if motion_type == SimpleMotionChar.underscore:
+            self.get_cursor_line_start_location(smart_home=True)
+
+        elif motion_type == SimpleMotionChar.dollar_sign:
+            return (current_row, 0)
+
+        elif motion_type == SimpleMotionChar.zero:
+            return (current_row, 0)
+
+        elif motion_type == SimpleMotionChar.percent_sign:
+            return find_matching_pair(current_row, current_col, lines)
+
+        return None
+
+
 
 MODE_MAPPING = {
     # Simple Motions
@@ -387,9 +419,9 @@ MODE_MAPPING = {
     "l": VimTextArea.action_cursor_right,
     "w": VimTextArea.action_cursor_word_right,
     "b": VimTextArea.action_cursor_word_left,
-    SimpleMotionChar.end_of_line: VimTextArea.action_cursor_line_end,
-    SimpleMotionChar.start_of_line: VimTextArea.action_cursor_absolute_line_start,
-    SimpleMotionChar.first_non_blank: VimTextArea.action_cursor_line_start,
+    SimpleMotionChar.dollar_sign: VimTextArea.action_cursor_line_end,
+    SimpleMotionChar.zero: VimTextArea.action_cursor_absolute_line_start,
+    SimpleMotionChar.underscore: VimTextArea.action_cursor_line_start,
     SimpleMotionChar.percent_sign: VimTextArea.jump_to_match,
 
     # Complex motion 
@@ -400,6 +432,7 @@ MODE_MAPPING = {
     "x": VimTextArea.action_delete_right,
     "s": VimTextArea.s_key_pressed,
     "u": VimTextArea.u_key_pressed,
+    "ctrl+r": VimTextArea.ctrl_r_key_pressed,
 
     # Mode change + motion
     "I": VimTextArea.action_enter_insert_mode_line_start,
@@ -423,27 +456,4 @@ VISUAL_LINE_MODE_MAPPING = {
     "k": VimTextArea.action_visual_line_cursor_up,
 }
 
-
-def get_single_motion_destination(
-    motion_type: str,
-    current_row: int,
-    current_col: int,
-    lines: list[str],
-) -> tuple[int, int] | None:
-    if motion_type == "underscore":
-        # First non-blank character on current line
-        line = lines[current_row] if current_row < len(lines) else ""
-        for idx, char in enumerate(line):
-            if char != " ":
-                return (current_row, idx)
-        return (current_row, 0)
-
-    elif motion_type == "dollar_sign":
-        line = lines[current_row] if current_row < len(lines) else ""
-        return (current_row, len(line) - 1) if line else (current_row, 0)
-
-    elif motion_type == "0":
-        return (current_row, 0)
-
-    return None
 

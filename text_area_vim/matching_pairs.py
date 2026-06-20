@@ -1,7 +1,5 @@
 """Find matching bracket/parenthesis/brace positions for Vim % command."""
 
-from typing import Tuple
-
 # Map opening to closing
 PAIRS = {
     "(": ")",
@@ -18,7 +16,7 @@ def find_matching_pair(
     current_row: int,
     current_col: int,
     lines: list[str],
-) -> Tuple[int, int] | None:
+) -> tuple[int, int] | None:
     """
     Find the position of the matching bracket/parenthesis/brace.
     
@@ -56,7 +54,7 @@ def _find_closing(
     open_char: str,
     close_char: str,
     lines: list[str],
-) -> Tuple[int, int] | None:
+) -> tuple[int, int] | None:
     """Find matching closing bracket from an opening bracket."""
     depth = 1
     row, col = start_row, start_col + 1
@@ -84,7 +82,7 @@ def _find_opening(
     close_char: str,
     open_char: str,
     lines: list[str],
-) -> Tuple[int, int] | None:
+) -> tuple[int, int] | None:
     """Find matching opening bracket from a closing bracket."""
     depth = 1
     row, col = start_row, start_col - 1
